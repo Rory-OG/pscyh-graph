@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Management Agent</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+            color: white;
+        }
+
+        .chat-panel {
+            width: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .chat-header p {
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background: rgba(100, 200, 255, 0.3);
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .message.agent {
+            background: rgba(255, 255, 255, 0.2);
+            align-self: flex-start;
+        }
+
+        .message-timestamp {
+            font-size: 0.7em;
+            opacity: 0.6;
+            margin-top: 5px;
+        }
+
+        .entities-extracted {
+            margin-top: 8px;
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+
+        .entity-tag {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin: 2px;
+            font-size: 0.7em;
+        }
+
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .chat-input input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .send-button {
+            background: rgba(100, 200, 255, 0.5);
+            border: none;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .send-button:hover {
+            background: rgba(100, 200, 255, 0.8);
+        }
+
+        .graph-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .graph-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .graph-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .graph-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .graph-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .node {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .node:hover {
+            stroke-width: 3px;
+        }
+
+        .link {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 2px;
+        }
+
+        .node-label {
+            font-size: 12px;
+            fill: white;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .search-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 25px;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-input {
+            background: transparent;
+            border: none;
+            color: white;
+            outline: none;
+            font-size: 14px;
+            width: 200px;
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            opacity: 0.7;
+        }
+
+        .error {
+            background: rgba(255, 100, 100, 0.3);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+            
+            .chat-panel {
+                width: 100%;
+                height: 50vh;
+            }
+            
+            .graph-panel {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // API functions
+        const API_BASE = '/api';
+
+        const sendMessage = async (message) => {
+            const response = await fetch(`${API_BASE}/chat/message`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
+            return response.json();
+        };
+
+        const getKnowledgeGraph = async () => {
+            const response = await fetch(`${API_BASE}/kg/`);
+            return response.json();
+        };
+
+        const getGraphStats = async () => {
+            const response = await fetch(`${API_BASE}/kg/stats`);
+            return response.json();
+        };
+
+        const searchEntities = async (query) => {
+            const response = await fetch(`${API_BASE}/kg/search`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query }),
+            });
+            return response.json();
+        };
+
+        // Chat Component
+        function ChatPanel() {
+            const [messages, setMessages] = useState([]);
+            const [inputMessage, setInputMessage] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages]);
+
+            const handleSendMessage = async () => {
+                if (!inputMessage.trim()) return;
+
+                const userMessage = {
+                    type: 'user',
+                    content: inputMessage,
+                    timestamp: new Date()
+                };
+
+                setMessages(prev => [...prev, userMessage]);
+                setInputMessage('');
+                setIsLoading(true);
+
+                try {
+                    const response = await sendMessage(inputMessage);
+                    const agentMessage = {
+                        type: 'agent',
+                        content: response.response,
+                        entities: response.entities_extracted,
+                        relationships: response.relationships_created,
+                        timestamp: new Date(response.timestamp)
+                    };
+                    setMessages(prev => [...prev, agentMessage]);
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    const errorMessage = {
+                        type: 'agent',
+                        content: 'Sorry, I encountered an error processing your message.',
+                        timestamp: new Date()
+                    };
+                    setMessages(prev => [...prev, errorMessage]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter') {
+                    handleSendMessage();
+                }
+            };
+
+            return (
+                <div className="chat-panel">
+                    <div className="chat-header">
+                        <h1><i className="fas fa-brain"></i> Knowledge Agent</h1>
+                        <p>Share your thoughts and build your knowledge graph</p>
+                    </div>
+                    
+                    <div className="chat-messages">
+                        {messages.map((message, index) => (
+                            <div key={index} className={`message ${message.type}`}>
+                                <div className="message-content">
+                                    {message.content}
+                                </div>
+                                {message.entities && message.entities.length > 0 && (
+                                    <div className="entities-extracted">
+                                        <strong>Entities:</strong>
+                                        {message.entities.map((entity, i) => (
+                                            <span key={i} className="entity-tag">
+                                                {entity.name} ({entity.type})
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="message-timestamp">
+                                    {message.timestamp.toLocaleTimeString()}
+                                </div>
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div className="loading">
+                                <i className="fas fa-spinner fa-spin"></i> Processing...
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className="chat-input">
+                        <div className="input-container">
+                            <input
+                                type="text"
+                                placeholder="Share your thoughts, reflections, or notes..."
+                                value={inputMessage}
+                                onChange={(e) => setInputMessage(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                disabled={isLoading}
+                            />
+                            <button 
+                                className="send-button"
+                                onClick={handleSendMessage}
+                                disabled={isLoading}
+                            >
+                                <i className="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Knowledge Graph Component
+        function KnowledgeGraphPanel() {
+            const [graphData, setGraphData] = useState({ nodes: [], relationships: [] });
+            const [stats, setStats] = useState({ total_entities: 0, total_relationships: 0 });
+            const [searchQuery, setSearchQuery] = useState('');
+            const [isLoading, setIsLoading] = useState(true);
+            const svgRef = useRef(null);
+
+            const loadGraphData = async () => {
+                try {
+                    const [graphResponse, statsResponse] = await Promise.all([
+                        getKnowledgeGraph(),
+                        getGraphStats()
+                    ]);
+                    setGraphData(graphResponse);
+                    setStats(statsResponse);
+                } catch (error) {
+                    console.error('Error loading graph data:', error);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                loadGraphData();
+                const interval = setInterval(loadGraphData, 5000); // Refresh every 5 seconds
+                return () => clearInterval(interval);
+            }, []);
+
+            useEffect(() => {
+                if (graphData.nodes.length > 0) {
+                    renderGraph();
+                }
+            }, [graphData]);
+
+            const renderGraph = () => {
+                const svg = d3.select(svgRef.current);
+                svg.selectAll("*").remove();
+
+                const width = svg.node().getBoundingClientRect().width;
+                const height = svg.node().getBoundingClientRect().height;
+
+                const simulation = d3.forceSimulation(graphData.nodes)
+                    .force("link", d3.forceLink(graphData.relationships).id(d => d.id).distance(100))
+                    .force("charge", d3.forceManyBody().strength(-300))
+                    .force("center", d3.forceCenter(width / 2, height / 2))
+                    .force("collision", d3.forceCollide().radius(30));
+
+                const link = svg.append("g")
+                    .selectAll("line")
+                    .data(graphData.relationships)
+                    .enter().append("line")
+                    .attr("class", "link");
+
+                const node = svg.append("g")
+                    .selectAll("circle")
+                    .data(graphData.nodes)
+                    .enter().append("circle")
+                    .attr("class", "node")
+                    .attr("r", d => Math.max(8, Math.min(20, d.properties.name ? d.properties.name.length : 10)))
+                    .attr("fill", d => {
+                        const colors = {
+                            'PERSON': '#ff6b6b',
+                            'CONCEPT': '#4ecdc4',
+                            'ORG': '#45b7d1',
+                            'DATE': '#96ceb4',
+                            'GPE': '#ffeaa7'
+                        };
+                        return colors[d.labels[1]] || '#ffffff';
+                    })
+                    .attr("stroke", "#ffffff")
+                    .attr("stroke-width", 2)
+                    .call(d3.drag()
+                        .on("start", dragstarted)
+                        .on("drag", dragged)
+                        .on("end", dragended));
+
+                const label = svg.append("g")
+                    .selectAll("text")
+                    .data(graphData.nodes)
+                    .enter().append("text")
+                    .attr("class", "node-label")
+                    .text(d => d.properties.name || d.id)
+                    .attr("dy", -25);
+
+                node.append("title")
+                    .text(d => `${d.properties.name || d.id}\nType: ${d.labels.join(', ')}`);
+
+                simulation.on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node
+                        .attr("cx", d => d.x)
+                        .attr("cy", d => d.y);
+
+                    label
+                        .attr("x", d => d.x)
+                        .attr("y", d => d.y);
+                });
+
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            };
+
+            return (
+                <div className="graph-panel">
+                    <div className="graph-header">
+                        <h2><i className="fas fa-project-diagram"></i> Knowledge Graph</h2>
+                        <div className="graph-stats">
+                            <div className="stat-item">
+                                <i className="fas fa-circle"></i>
+                                <span>{stats.total_entities} Entities</span>
+                            </div>
+                            <div className="stat-item">
+                                <i className="fas fa-arrow-right"></i>
+                                <span>{stats.total_relationships} Relationships</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="graph-container">
+                        <div className="search-container">
+                            <i className="fas fa-search"></i>
+                            <input
+                                type="text"
+                                className="search-input"
+                                placeholder="Search entities..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        
+                        {isLoading ? (
+                            <div className="loading">
+                                <i className="fas fa-spinner fa-spin"></i> Loading knowledge graph...
+                            </div>
+                        ) : (
+                            <svg ref={svgRef} className="graph-svg"></svg>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            return (
+                <div className="app-container">
+                    <ChatPanel />
+                    <KnowledgeGraphPanel />
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
